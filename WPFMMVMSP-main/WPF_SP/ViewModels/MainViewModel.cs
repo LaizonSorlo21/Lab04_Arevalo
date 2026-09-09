@@ -1,49 +1,53 @@
 using System.Collections.ObjectModel;
-using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WPF_SP.Data;
 using WPF_SP.Models;
+using WPF_SP.Services;
 
 namespace WPF_SP.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
     private readonly ITareaRepository _repository;
+    private readonly IDialogService _dialogService;
 
     public ObservableCollection<Tarea> Tareas { get; } = new();
 
     [ObservableProperty]
-    private string nuevoTitulo = string.Empty;
+    private string _nuevoTitulo = string.Empty;
 
     [ObservableProperty]
-    private string? nuevaDescripcion;
+    private string? _nuevaDescripcion;
 
     [ObservableProperty]
-    private EstadoFiltro currentFilter = EstadoFiltro.Todas;
+    private EstadoFiltro _currentFilter = EstadoFiltro.Todas;
 
     [ObservableProperty]
-    private string? errorMessage;
+    private string? _errorMessage;
 
     [ObservableProperty]
-    private bool isBusy;
+    private bool _isBusy;
 
     [ObservableProperty]
-    private bool hasTareas;
+    private bool _hasTareas;
 
     /// <summary>Se dispara cuando el usuario pide editar una tarea; la vista es responsable de mostrar el diálogo.</summary>
     public event Action<TareaEditViewModel>? EditarSolicitado;
 
-    public MainViewModel(ITareaRepository repository)
+    public MainViewModel(ITareaRepository repository, IDialogService dialogService)
     {
-        _repository = repository;
+        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
     }
 
     partial void OnCurrentFilterChanged(EstadoFiltro value) => _ = CargarAsync();
 
     [RelayCommand]
-    private async Task CargarAsync()
+    private async Task CargarAsync(CancellationToken cancellationToken = default)
     {
+        if (IsBusy) return;
+
         IsBusy = true;
         ErrorMessage = null;
         try
@@ -55,12 +59,18 @@ public partial class MainViewModel : ObservableObject
                 _ => await _repository.ListarTodasAsync()
             };
 
+            cancellationToken.ThrowIfCancellationRequested();
+
             Tareas.Clear();
             foreach (var tarea in resultado)
             {
                 Tareas.Add(tarea);
             }
             HasTareas = Tareas.Count > 0;
+        }
+        catch (OperationCanceledException)
+        {
+            // Ignorar cancelación normal de tareas
         }
         catch (Exception ex)
         {
@@ -72,19 +82,16 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(PuedeAgregar))]
     private async Task AgregarAsync()
     {
-        if (string.IsNullOrWhiteSpace(NuevoTitulo))
-        {
-            ErrorMessage = "El título es obligatorio.";
-            return;
-        }
-
         ErrorMessage = null;
         try
         {
-            await _repository.CrearAsync(NuevoTitulo.Trim(), string.IsNullOrWhiteSpace(NuevaDescripcion) ? null : NuevaDescripcion.Trim());
+            await _repository.CrearAsync(
+                NuevoTitulo.Trim(), 
+                string.IsNullOrWhiteSpace(NuevaDescripcion) ? null : NuevaDescripcion.Trim());
+            
             NuevoTitulo = string.Empty;
             NuevaDescripcion = null;
             await CargarAsync();
@@ -94,6 +101,10 @@ public partial class MainViewModel : ObservableObject
             ErrorMessage = $"No se pudo crear la tarea: {ex.Message}";
         }
     }
+
+    private bool PuedeAgregar() => !string.IsNullOrWhiteSpace(NuevoTitulo);
+
+    partial void OnNuevoTituloChanged(string value) => AgregarAsyncCommand.NotifyCanExecuteChanged();
 
     [RelayCommand]
     private async Task EditarAsync(Tarea? tarea)
@@ -127,8 +138,11 @@ public partial class MainViewModel : ObservableObject
         ErrorMessage = null;
         try
         {
-            await _repository.ActualizarAsync(edicion.TareaID, edicion.Titulo.Trim(),
+            await _repository.ActualizarAsync(
+                edicion.TareaID, 
+                edicion.Titulo.Trim(),
                 string.IsNullOrWhiteSpace(edicion.Descripcion) ? null : edicion.Descripcion.Trim());
+            
             await CargarAsync();
         }
         catch (Exception ex)
@@ -153,7 +167,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            tarea.Completada = !tarea.Completada;
+            tarea.Completada = !tarea.Completada; // Revertir en caso de fallo
             ErrorMessage = $"No se pudo actualizar el estado: {ex.Message}";
         }
     }
@@ -163,13 +177,11 @@ public partial class MainViewModel : ObservableObject
     {
         if (tarea is null) return;
 
-        var confirmar = MessageBox.Show(
-            $"¿Eliminar la tarea \"{tarea.Titulo}\"?",
-            "Confirmar eliminación",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
+        bool confirmado = _dialogService.Confirmar(
+            $"¿Eliminar la tarea \"{tarea.Titulo}\"?", 
+            "Confirmar eliminación");
 
-        if (confirmar != MessageBoxResult.Yes) return;
+        if (!confirmado) return;
 
         ErrorMessage = null;
         try
