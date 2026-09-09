@@ -13,6 +13,15 @@ public partial class MainViewModel : ObservableObject
     private readonly IDialogService _dialogService;
 
     public ObservableCollection<Tarea> Tareas { get; } = new();
+    
+    [ObservableProperty]
+    private string? _errorMessage;
+
+    [ObservableProperty]
+    private bool _isBusy;
+
+    [ObservableProperty]
+    private bool _hasTareas;
 
     [ObservableProperty]
     private string _nuevoTitulo = string.Empty;
@@ -22,15 +31,6 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private EstadoFiltro _currentFilter = EstadoFiltro.Todas;
-
-    [ObservableProperty]
-    private string? _errorMessage;
-
-    [ObservableProperty]
-    private bool _isBusy;
-
-    [ObservableProperty]
-    private bool _hasTareas;
 
     /// <summary>Se dispara cuando el usuario pide editar una tarea; la vista es responsable de mostrar el diálogo.</summary>
     public event Action<TareaEditViewModel>? EditarSolicitado;
@@ -92,8 +92,8 @@ public partial class MainViewModel : ObservableObject
                 NuevoTitulo.Trim(), 
                 string.IsNullOrWhiteSpace(NuevaDescripcion) ? null : NuevaDescripcion.Trim());
             
-            NuevoTitulo = string.Empty;
             NuevaDescripcion = null;
+            NuevoTitulo = string.Empty;
             await CargarAsync();
         }
         catch (Exception ex)
@@ -167,8 +167,8 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            tarea.Completada = !tarea.Completada; // Revertir en caso de fallo
             ErrorMessage = $"No se pudo actualizar el estado: {ex.Message}";
+            tarea.Completada = !tarea.Completada; // Revertir en caso de fallo
         }
     }
 
