@@ -10,115 +10,135 @@ public class TareaRepository : ITareaRepository
 
     public TareaRepository(string connectionString)
     {
-        _connectionString = connectionString;
+        _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
     }
 
-    public async Task<int> CrearAsync(string titulo, string? descripcion)
+    public async Task<int> CrearAsync(string titulo, string? descripcion, CancellationToken cancellationToken = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.usp_Tarea_Crear", connection)
+        return await ExecuteWithConnectionAsync(async connection =>
         {
-            CommandType = CommandType.StoredProcedure
-        };
-        command.Parameters.Add("@Titulo", SqlDbType.NVarChar, 150).Value = titulo;
-        command.Parameters.Add("@Descripcion", SqlDbType.NVarChar, -1).Value = (object?)descripcion ?? DBNull.Value;
+            await using var command = new SqlCommand("dbo.usp_Tarea_Crear", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            command.Parameters.Add("@Titulo", SqlDbType.NVarChar, 150).Value = titulo;
+            command.Parameters.Add("@Descripcion", SqlDbType.NVarChar, -1).Value = (object?)descripcion ?? DBNull.Value;
 
-        await connection.OpenAsync();
-        var result = await command.ExecuteScalarAsync();
-        return Convert.ToInt32(result);
+            var result = await command.ExecuteScalarAsync(cancellationToken);
+            return Convert.ToInt32(result);
+        }, cancellationToken);
     }
 
-    public async Task<Tarea?> ObtenerPorIdAsync(int tareaId)
+    public async Task<Tarea?> ObtenerPorIdAsync(int tareaId, CancellationToken cancellationToken = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.usp_Tarea_ObtenerPorId", connection)
+        return await ExecuteWithConnectionAsync(async connection =>
         {
-            CommandType = CommandType.StoredProcedure
-        };
-        command.Parameters.Add("@TareaID", SqlDbType.Int).Value = tareaId;
+            await using var command = new SqlCommand("dbo.usp_Tarea_ObtenerPorId", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            command.Parameters.Add("@TareaID", SqlDbType.Int).Value = tareaId;
 
-        await connection.OpenAsync();
-        await using var reader = await command.ExecuteReaderAsync();
-        return await reader.ReadAsync() ? MapTarea(reader) : null;
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            return await reader.ReadAsync(cancellationToken) ? MapTarea(reader) : null;
+        }, cancellationToken);
     }
 
-    public async Task<List<Tarea>> ListarTodasAsync()
+    public async Task<List<Tarea>> ListarTodasAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.usp_Tarea_ListarTodas", connection)
+        return await ExecuteWithConnectionAsync(async connection =>
         {
-            CommandType = CommandType.StoredProcedure
-        };
+            await using var command = new SqlCommand("dbo.usp_Tarea_ListarTodas", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
 
-        await connection.OpenAsync();
-        await using var reader = await command.ExecuteReaderAsync();
-        var tareas = new List<Tarea>();
-        while (await reader.ReadAsync())
-        {
-            tareas.Add(MapTarea(reader));
-        }
-        return tareas;
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            var tareas = new List<Tarea>();
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                tareas.Add(MapTarea(reader));
+            }
+            return tareas;
+        }, cancellationToken);
     }
 
-    public async Task<List<Tarea>> ListarPorEstadoAsync(bool completada)
+    public async Task<List<Tarea>> ListarPorEstadoAsync(bool completada, CancellationToken cancellationToken = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.usp_Tarea_ListarPorEstado", connection)
+        return await ExecuteWithConnectionAsync(async connection =>
         {
-            CommandType = CommandType.StoredProcedure
-        };
-        command.Parameters.Add("@Completada", SqlDbType.Bit).Value = completada;
+            await using var command = new SqlCommand("dbo.usp_Tarea_ListarPorEstado", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            command.Parameters.Add("@Completada", SqlDbType.Bit).Value = completada;
 
-        await connection.OpenAsync();
-        await using var reader = await command.ExecuteReaderAsync();
-        var tareas = new List<Tarea>();
-        while (await reader.ReadAsync())
-        {
-            tareas.Add(MapTarea(reader));
-        }
-        return tareas;
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            var tareas = new List<Tarea>();
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                tareas.Add(MapTarea(reader));
+            }
+            return tareas;
+        }, cancellationToken);
     }
 
-    public async Task ActualizarAsync(int tareaId, string titulo, string? descripcion)
+    public async Task ActualizarAsync(int tareaId, string titulo, string? descripcion, CancellationToken cancellationToken = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.usp_Tarea_Actualizar", connection)
+        await ExecuteWithConnectionAsync(async connection =>
         {
-            CommandType = CommandType.StoredProcedure
-        };
-        command.Parameters.Add("@TareaID", SqlDbType.Int).Value = tareaId;
-        command.Parameters.Add("@Titulo", SqlDbType.NVarChar, 150).Value = titulo;
-        command.Parameters.Add("@Descripcion", SqlDbType.NVarChar, -1).Value = (object?)descripcion ?? DBNull.Value;
+            await using var command = new SqlCommand("dbo.usp_Tarea_Actualizar", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            command.Parameters.Add("@TareaID", SqlDbType.Int).Value = tareaId;
+            command.Parameters.Add("@Titulo", SqlDbType.NVarChar, 150).Value = titulo;
+            command.Parameters.Add("@Descripcion", SqlDbType.NVarChar, -1).Value = (object?)descripcion ?? DBNull.Value;
 
-        await connection.OpenAsync();
-        await command.ExecuteNonQueryAsync();
+            await command.ExecuteNonQueryAsync(cancellationToken);
+            return true;
+        }, cancellationToken);
     }
 
-    public async Task MarcarCompletadaAsync(int tareaId, bool completada)
+    public async Task MarcarCompletadaAsync(int tareaId, bool completada, CancellationToken cancellationToken = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.usp_Tarea_MarcarCompletada", connection)
+        await ExecuteWithConnectionAsync(async connection =>
         {
-            CommandType = CommandType.StoredProcedure
-        };
-        command.Parameters.Add("@TareaID", SqlDbType.Int).Value = tareaId;
-        command.Parameters.Add("@Completada", SqlDbType.Bit).Value = completada;
+            await using var command = new SqlCommand("dbo.usp_Tarea_MarcarCompletada", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            command.Parameters.Add("@TareaID", SqlDbType.Int).Value = tareaId;
+            command.Parameters.Add("@Completada", SqlDbType.Bit).Value = completada;
 
-        await connection.OpenAsync();
-        await command.ExecuteNonQueryAsync();
+            await command.ExecuteNonQueryAsync(cancellationToken);
+            return true;
+        }, cancellationToken);
     }
 
-    public async Task EliminarAsync(int tareaId)
+    public async Task EliminarAsync(int tareaId, CancellationToken cancellationToken = default)
+    {
+        await ExecuteWithConnectionAsync(async connection =>
+        {
+            await using var command = new SqlCommand("dbo.usp_Tarea_Eliminar", connection)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            command.Parameters.Add("@TareaID", SqlDbType.Int).Value = tareaId;
+
+            await command.ExecuteNonQueryAsync(cancellationToken);
+            return true;
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Método auxiliar privado para centralizar la apertura y disposición de la conexión SQL de manera segura.
+    /// </summary>
+    private async Task<T> ExecuteWithConnectionAsync<T>(Func<SqlConnection, Task<T>> action, CancellationToken cancellationToken)
     {
         await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand("dbo.usp_Tarea_Eliminar", connection)
-        {
-            CommandType = CommandType.StoredProcedure
-        };
-        command.Parameters.Add("@TareaID", SqlDbType.Int).Value = tareaId;
-
-        await connection.OpenAsync();
-        await command.ExecuteNonQueryAsync();
+        await connection.OpenAsync(cancellationToken);
+        return await action(connection);
     }
 
     private static Tarea MapTarea(SqlDataReader reader)
